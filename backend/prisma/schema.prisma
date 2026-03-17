@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER MODELS ====================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String?   @map("password_hash")
+  avatarUrl     String?   @map("avatar_url")
+  bio           String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  isBanned      Boolean   @default(false) @map("is_banned")
+  banReason     String?   @map("ban_reason")
+  oauthProvider String?   @map("oauth_provider")
+  oauthId       String?   @map("oauth_id")
+
+  playerProfile   PlayerProfile?
+  currencies      Currency?
+  friendsAsUser   Friend[]  @relation("FriendUser")
+  friendsAsFriend Friend[]  @relation("FriendFriend")
+  reels           Reel[]
+  reelLikes       ReelLike[]
+  reelComments    ReelComment[]
+  gameSessions   GameSession[]
+  gamePlayers    GamePlayer[]
+  leaderboardEntries LeaderboardEntry[]
+  dailyChallenges DailyChallenge[]
+  chatMessages    ChatMessage[]
+  inventoryItems InventoryItem[]
+  sentFriendRequests    FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+
+  @@map("users")
+}
+
+model Friend {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  friendId  String    @map("friend_id")
+  status    String    @default("pending") // pending, accepted, blocked
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user   User @relation("FriendUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@map("friends")
+}
+
+model FriendRequest {
+  id          String    @id @default(uuid())
+  senderId    String    @map("sender_id")
+  receiverId  String    @map("receiver_id")
+  status      String    @default("pending") // pending, accepted, rejected
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@map("friend_requests")
+}
+
+// ==================== PLAYER MODELS ====================
+
+model PlayerProfile {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  displayName   String    @map("display_name")
+  level         Int       @default(1)
+  xp            Int       @default(0)
+  rankId        Int?      @map("rank_id")
+  wins          Int       @default(0)
+  losses        Int       @default(0)
+  gamesPlayed   Int       @default(0) @map("games_played")
+  totalPlaytime Int       @default(0) @map("total_playtime")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("player_profiles")
+}
+
+model Rank {
+  id          Int     @id
+  name        String
+  minRating   Int     @map("min_rating")
+  maxRating   Int     @map("max_rating")
+  icon        String?
+  color       String?
+
+  playerProfiles PlayerProfile[]
+
+  @@map("ranks")
+}
+
+model Currency {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  coins         Int       @default(1000)
+  gems          Int       @default(0)
+  premiumGems   Int       @default(0) @map("premium_gems")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("currencies")
+}
+
+model InventoryItem {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  itemId      String    @map("item_id")
+  itemType    String    @map("item_type")
+  quantity    Int       @default(1)
+  acquiredAt  DateTime  @default(now()) @map("acquired_at")
+  isEquipped  Boolean   @default(false) @map("is_equipped")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+  @@map("inventory_items")
+}
+
+model ShopItem {
+  id              String    @id @default(uuid())
+  itemId          String    @unique @map("item_id")
+  name            String
+  description     String?
+  type            String
+  priceCoins      Int?      @map("price_coins")
+  priceGems       Int?      @map("price_gems")
+  rarity          String?
+  imageUrl        String?   @map("image_url")
+  isLimited      Boolean   @default(false) @map("is_limited")
+  availableUntil  DateTime? @map("available_until")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("shop_items")
+}
+
+model Season {
+  id        Int      @id
+  name      String
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  isActive  Boolean  @default(false) @map("is_active")
+
+  leaderboardEntries LeaderboardEntry[]
+
+  @@map("seasons")
+}
+
+model LeaderboardEntry {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  gameMode    String    @map("game_mode")
+  rating      Int       @default(1000)
+  rank        Int?
+  seasonId    Int?      @map("season_id")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season Season? @relation(fields: [seasonId], references: [id])
+
+  @@unique([userId, gameMode, seasonId])
+  @@map("leaderboard_entries")
+}
+
+// ==================== GAME MODELS ====================
+
+model GameSession {
+  id          String    @id @default(uuid())
+  gameMode    String    @map("game_mode")
+  status      String    @default("waiting") // waiting, starting, in_progress, ended
+  maxPlayers  Int       @default(4) @map("max_players")
+  hostId      String?   @map("host_id")
+  mapId       String?   @map("map_id")
+  settings    Json?     @map("settings")
+  startedAt   DateTime? @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  host     User?         @relation(fields: [hostId], references: [id])
+  players  GamePlayer[]
+
+  @@map("game_sessions")
+}
+
+model GamePlayer {
+  id          String    @id @default(uuid())
+  sessionId   String    @map("session_id")
+  userId      String    @map("user_id")
+  teamId      Int?      @map("team_id")
+  score       Int       @default(0)
+  kills       Int       @default(0)
+  deaths      Int       @default(0)
+  placement   Int?
+  isReady     Boolean   @default(false) @map("is_ready")
+  isAlive     Boolean   @default(true) @map("is_alive")
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+
+  session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@map("game_players")
+}
+
+model DailyChallenge {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  challengeType String    @map("challenge_type")
+  description   String?
+  targetValue   Int       @map("target_value")
+  currentValue  Int       @default(0) @map("current_value")
+  rewardCoins   Int?      @map("reward_coins")
+  rewardXp      Int?      @map("reward_xp")
+  isCompleted   Boolean   @default(false) @map("is_completed")
+  expiresAt     DateTime  @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("daily_challenges")
+}
+
+// ==================== SOCIAL MODELS ====================
+
+model Reel {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  videoUrl      String    @map("video_url")
+  thumbnailUrl  String?   @map("thumbnail_url")
+  title         String?
+  description   String?  @map("description")
+  gameMode      String?   @map("game_mode")
+  duration      Int?
+  views         Int       @default(0)
+  likes         Int       @default(0)
+  commentsCount Int       @default(0) @map("comments_count")
+  isPublic      Boolean   @default(true) @map("is_public")
+  isFeatured    Boolean   @default(false) @map("is_featured")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes    ReelLike[]
+  comments ReelComment[]
+
+  @@map("reels")
+}
+
+model ReelLike {
+  id        String    @id @default(uuid())
+  reelId    String    @map("reel_id")
+  userId    String    @map("user_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+  @@map("reel_likes")
+}
+
+model ReelComment {
+  id        String    @id @default(uuid())
+  reelId    String    @map("reel_id")
+  userId    String    @map("user_id")
+  content   String
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reel_comments")
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid())
+  roomId    String    @map("room_id")
+  userId    String    @map("user_id")
+  content   String
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@map("chat_messages")
+}
+
+model GameMode {
+  id          String    @id @default(uuid())
+  modeId      String    @unique @map("mode_id")
+  name        String
+  description String?
+  minPlayers  Int       @map("min_players")
+  maxPlayers  Int       @map("max_players")
+  isTeamBased Boolean   @default(false) @map("is_team_based")
+  iconUrl     String?   @map("icon_url")
+  isActive    Boolean   @default(true) @map("is_active")
+
+  @@map("game_modes")
+}
